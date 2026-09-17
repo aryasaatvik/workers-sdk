@@ -182,9 +182,14 @@ export class CloudflarePoolWorker implements PoolWorker {
 	}
 
 	async stop(): Promise<void> {
-		this.socket?.close();
-		this.socket = undefined;
-		this.moduleFetchRequestIds.clear();
+		try {
+			this.socket?.close();
+		} catch (err) {
+			this.debug("miniflare socket close threw: %O", err);
+		} finally {
+			this.socket = undefined;
+			this.moduleFetchRequestIds.clear();
+		}
 		// Disposal errors should not override the test result, but log them for
 		// diagnostics in case they indicate an underlying teardown issue.
 		await this.mf?.dispose().catch((err) => {
