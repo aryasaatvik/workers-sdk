@@ -626,6 +626,7 @@ export const WorkflowExportSchema = z.strictObject({
 			errorRetention: WorkflowRetentionSchema.optional(),
 		})
 		.optional(),
+	jurisdiction: z.enum(["eu", "fedramp", "us"]).optional(),
 });
 
 // Containers are only supported on the SQLite storage engine, so each live

@@ -526,7 +526,7 @@ export interface WorkerEntrypointExport {
  */
 export interface WorkflowExport extends Pick<
 	WorkflowBinding,
-	"limits" | "concurrency" | "schedules" | "default_retention"
+	"limits" | "concurrency" | "schedules" | "default_retention" | "jurisdiction"
 > {
 	type: "workflow";
 	name: string;
@@ -1019,6 +1019,11 @@ export type WorkflowBinding = {
 		/** How long to retain errored instances */
 		error_retention?: number | string;
 	};
+	/**
+	 * Optional jurisdiction that the Workflow's instances run and store their data in. It is set
+	 * when the Workflow is created and cannot be changed afterwards.
+	 */
+	jurisdiction?: "eu" | "fedramp" | "us";
 };
 
 type ConnectHandlerConfigBase = {

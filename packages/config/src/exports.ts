@@ -188,6 +188,11 @@ export interface WorkflowExportOptions {
 		/** How long to retain errored instances. */
 		errorRetention?: number | string;
 	};
+	/**
+	 * Jurisdiction that the Workflow's instances run and store their data in.
+	 * It is set when the Workflow is created and cannot be changed afterwards.
+	 */
+	jurisdiction?: "eu" | "fedramp" | "us";
 }
 
 export interface WorkflowExport extends WorkflowExportOptions {

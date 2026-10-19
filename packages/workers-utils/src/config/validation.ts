@@ -3282,6 +3282,31 @@ function validateWorkflowConcurrency(
 }
 
 /**
+ * Check the optional `jurisdiction` setting of a Workflow binding or export.
+ */
+function validateWorkflowJurisdiction(
+	diagnostics: Diagnostics,
+	field: string,
+	kind: string,
+	value: Record<string, unknown>
+): boolean {
+	const { jurisdiction } = value;
+	if (
+		jurisdiction === undefined ||
+		(typeof jurisdiction === "string" &&
+			["eu", "fedramp", "us"].includes(jurisdiction))
+	) {
+		return true;
+	}
+	diagnostics.errors.push(
+		`"${field}" ${kind} "jurisdiction" field must be one of "eu", "fedramp", or "us", but got ${JSON.stringify(
+			jurisdiction
+		)}.`
+	);
+	return false;
+}
+
+/**
  * Check that the given field is a valid "workflow" binding object.
  */
 const validateWorkflowBinding: ValidatorFn = (diagnostics, field, value) => {
@@ -3351,6 +3376,9 @@ const validateWorkflowBinding: ValidatorFn = (diagnostics, field, value) => {
 	isValid =
 		validateWorkflowConcurrency(diagnostics, field, "bindings", settings) &&
 		isValid;
+	isValid =
+		validateWorkflowJurisdiction(diagnostics, field, "bindings", settings) &&
+		isValid;
 
 	validateAdditionalProperties(diagnostics, field, Object.keys(value), [
 		"binding",
@@ -3361,6 +3389,7 @@ const validateWorkflowBinding: ValidatorFn = (diagnostics, field, value) => {
 		"concurrency",
 		"schedules",
 		"default_retention",
+		"jurisdiction",
 	]);
 
 	return isValid;
@@ -7415,6 +7444,13 @@ function validateWorkflowExport(
 	valid =
 		validateWorkflowConcurrency(diagnostics, field, "export", workflowExport) &&
 		valid;
+	valid =
+		validateWorkflowJurisdiction(
+			diagnostics,
+			field,
+			"export",
+			workflowExport
+		) && valid;
 
 	valid =
 		validateAdditionalProperties(
@@ -7428,6 +7464,7 @@ function validateWorkflowExport(
 				"concurrency",
 				"schedules",
 				"default_retention",
+				"jurisdiction",
 			]
 		) && valid;
 
