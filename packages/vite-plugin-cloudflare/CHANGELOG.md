@@ -1,5 +1,23 @@
 # @cloudflare/vite-plugin
 
+## 1.65.0
+
+### Minor Changes
+
+- [#16363](https://github.com/cloudflare/workers-sdk/pull/16363) [`d3240f2`](https://github.com/cloudflare/workers-sdk/commit/d3240f21d85bfee569aebc12524a7182db841932) Thanks [@jamesopstad](https://github.com/jamesopstad)! - Remove the `experimental.newConfig` option from Vite plugin v1
+
+  Vite plugin v1 now supports Wrangler configuration files only. Projects using `cloudflare.config.ts` for configuration should upgrade to Vite plugin v2 beta.
+
+### Patch Changes
+
+- [#16289](https://github.com/cloudflare/workers-sdk/pull/16289) [`bbe822f`](https://github.com/cloudflare/workers-sdk/commit/bbe822f7dd7d13ac4f975d987b3043a91687ca1f) Thanks [@petebacondarwin](https://github.com/petebacondarwin)! - Retry remote preview token refreshes after transient failures
+
+  Backport the retry fix to the private remote-bindings workspace package and require `wrangler@4.151.1` so long-running remote development sessions recover after a network outage.
+
+- [#16291](https://github.com/cloudflare/workers-sdk/pull/16291) [`0262f7d`](https://github.com/cloudflare/workers-sdk/commit/0262f7d180d9dd58649499e25de8dccccf2d3890) Thanks [@petebacondarwin](https://github.com/petebacondarwin)! - Use published SDK dependencies for Vite plugin v1 maintenance
+
+  Pin the plugin's published SDK dependencies to their deployed npm versions. Keep private shared packages as workspace dependencies so their implementation and build tools remain available on the v1 maintenance branch.
+
 ## 1.64.0
 
 ### Minor Changes
