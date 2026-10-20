@@ -8,13 +8,16 @@ async function state(arm: Arm) {
 }
 
 async function abortSnapshot() {
-	const [worker, transport] = await Promise.all([
+	const [worker, transport, reset] = await Promise.all([
 		state("abort"),
 		fetch(`${viteTestUrl}/__import-lifetime-transport`).then((response) =>
 			response.json()
 		),
+		fetch(`${viteTestUrl}/__import-lifetime-reset`).then((response) =>
+			response.json()
+		),
 	]);
-	return { worker, transport, observed_at: Date.now() };
+	return { worker, transport, reset, observed_at: Date.now() };
 }
 
 async function releaseAbortGate() {
@@ -55,7 +58,7 @@ describe.runIf(!isBuild)("deferred import caller lifetime", () => {
 	);
 
 	test(
-		"settles a cached import after the first Worker request actually aborts",
+		"settles a cached import after an abrupt runtime TCP reset aborts its first Worker request",
 		{ retry: 0 },
 		async ({ expect }) => {
 			try {
@@ -114,6 +117,16 @@ describe.runIf(!isBuild)("deferred import caller lifetime", () => {
 				expect(first.destroyed).toBe(true);
 				await vi.waitFor(async () => {
 					const snapshot = await abortSnapshot();
+					expect(
+						snapshot.reset,
+						JSON.stringify({ phase: "runtime-reset-ownership", ...snapshot })
+					).toMatchObject({
+						target_count: 1,
+						reset_issued: true,
+						ownership_confirmed: true,
+						foreign_overlap: false,
+						failure: "",
+					});
 					expect(
 						snapshot.worker,
 						JSON.stringify({
