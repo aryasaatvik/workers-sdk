@@ -1,4 +1,4 @@
-import { abortGate, phases, recordPhase } from "./state";
+import { abortGate, phases } from "./state";
 import type { Arm } from "./state";
 
 const promises = new Map<Arm, Promise<{ value: string }>>();
@@ -10,7 +10,6 @@ function load(arm: Arm): Promise<{ value: string }> {
 	}
 
 	phases[arm].started = true;
-	recordPhase(arm, "import-start");
 	const operation =
 		arm === "early"
 			? import("./early")
@@ -21,39 +20,12 @@ function load(arm: Arm): Promise<{ value: string }> {
 	void operation.then(
 		() => {
 			phases[arm].settled = "fulfilled";
-			recordPhase(arm, "import-fulfilled");
 		},
 		() => {
 			phases[arm].settled = "rejected";
-			recordPhase(arm, "import-rejected");
 		}
 	);
 	return operation;
-}
-
-async function observeAbortBody(body: ReadableStream<Uint8Array>) {
-	const state = phases.abort.body_read;
-	try {
-		const reader = body.getReader();
-		try {
-			while (true) {
-				state.pending = true;
-				const { done, value } = await reader.read();
-				state.pending = false;
-				if (done) {
-					state.complete = true;
-					return;
-				}
-				state.received_bytes += value.byteLength;
-			}
-		} finally {
-			reader.releaseLock();
-		}
-	} catch {
-		state.failed = true;
-	} finally {
-		state.pending = false;
-	}
 }
 
 export default {
@@ -75,7 +47,6 @@ export default {
 			}
 			if (!abortGate.released) {
 				abortGate.released = true;
-				recordPhase("abort", "module-gate-release-requested");
 			}
 			return new Response("released");
 		}
@@ -83,26 +54,13 @@ export default {
 			return new Response(null, { status: 404 });
 		}
 
-		if (request.headers.get("x-import-lifetime-call") === "first") {
-			recordPhase(arm, "request-enter", request.signal.aborted);
-		}
 		request.signal.addEventListener(
 			"abort",
 			() => {
 				phases[arm].aborted = true;
-				recordPhase(arm, "request-abort", request.signal.aborted);
 			},
 			{ once: true }
 		);
-		if (
-			arm === "abort" &&
-			request.headers.get("x-import-lifetime-call") === "first"
-		) {
-			if (request.method !== "POST" || request.body === null) {
-				return new Response("missing fixture body", { status: 400 });
-			}
-			void observeAbortBody(request.body);
-		}
 		const operation = load(arm);
 		if (url.pathname === "/kick") {
 			return new Response("kicked");

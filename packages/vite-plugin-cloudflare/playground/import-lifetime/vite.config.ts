@@ -1,7 +1,6 @@
 import { cloudflare } from "@cloudflare/vite-plugin";
 import { defineConfig } from "vite";
 import { installRuntimeReset } from "./runtime-reset";
-import { transportDiagnostic } from "./transport-diagnostic";
 
 export default defineConfig({
 	plugins: [
@@ -21,7 +20,6 @@ export default defineConfig({
 				});
 			},
 		},
-		transportDiagnostic(),
 		cloudflare({ inspectorPort: false, persistState: false }),
 	],
 });
