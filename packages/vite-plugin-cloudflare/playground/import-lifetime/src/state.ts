@@ -11,6 +11,8 @@ function initialState() {
 	};
 }
 
+export const abortGate = { entered: false, released: false };
+
 export const phases = {
 	early: initialState(),
 	abort: initialState(),

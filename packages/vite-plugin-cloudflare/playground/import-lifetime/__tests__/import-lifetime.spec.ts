@@ -17,6 +17,16 @@ async function abortSnapshot() {
 	return { worker, transport, observed_at: Date.now() };
 }
 
+async function releaseAbortGate() {
+	const response = await fetch(`${viteTestUrl}/release?arm=abort`, {
+		method: "POST",
+		signal: AbortSignal.timeout(5_000),
+	});
+	if (response.status !== 200 || (await response.text()) !== "released") {
+		throw new Error("Abort module gate release failed");
+	}
+}
+
 async function render(arm: Arm) {
 	try {
 		const response = await fetch(`${viteTestUrl}/render?arm=${arm}`, {
@@ -48,106 +58,115 @@ describe.runIf(!isBuild)("deferred import caller lifetime", () => {
 		"settles a cached import after the first Worker request actually aborts",
 		{ retry: 0 },
 		async ({ expect }) => {
-			// Own a dedicated connection so disconnection does not depend on fetch pooling.
-			const clientEvents = [{ phase: "request-create", at: Date.now() }];
-			const first = get(`${viteTestUrl}/render?arm=abort`, {
-				agent: false,
-				headers: { "x-import-lifetime-call": "first" },
-			});
-			let responseReceived = false;
-			let disconnecting = false;
-			let unexpectedError: Error | undefined;
-			const onResponse = (response: IncomingMessage) => {
-				responseReceived = true;
-				clientEvents.push({ phase: "response-received", at: Date.now() });
-				response.resume();
-			};
-			const onError = (error: Error) => {
-				if (!disconnecting) {
-					unexpectedError = error;
-				}
-			};
-			first.once("response", onResponse);
-			first.on("error", onError);
-			const closed = new Promise<void>((resolve) =>
-				first.once("close", resolve)
-			);
 			try {
+				// Own a dedicated connection so disconnection does not depend on fetch pooling.
+				const clientEvents = [{ phase: "request-create", at: Date.now() }];
+				const first = get(`${viteTestUrl}/render?arm=abort`, {
+					agent: false,
+					headers: { "x-import-lifetime-call": "first" },
+				});
+				let responseReceived = false;
+				let disconnecting = false;
+				let unexpectedError: Error | undefined;
+				const onResponse = (response: IncomingMessage) => {
+					responseReceived = true;
+					clientEvents.push({ phase: "response-received", at: Date.now() });
+					response.resume();
+				};
+				const onError = (error: Error) => {
+					if (!disconnecting) {
+						unexpectedError = error;
+					}
+				};
+				first.once("response", onResponse);
+				first.on("error", onError);
+				const closed = new Promise<void>((resolve) =>
+					first.once("close", resolve)
+				);
+				try {
+					await vi.waitFor(async () => {
+						const snapshot = await abortSnapshot();
+						expect(
+							snapshot.worker,
+							JSON.stringify({
+								phase: "before-disconnect",
+								...snapshot,
+								clientEvents,
+							})
+						).toMatchObject({
+							started: true,
+							evaluated: false,
+							settled: "pending",
+							gate: { entered: true, released: false },
+						});
+					}, WAIT_FOR_OPTIONS);
+				} finally {
+					disconnecting = true;
+					clientEvents.push({ phase: "disconnect-requested", at: Date.now() });
+					first.destroy();
+					await closed;
+					clientEvents.push({ phase: "request-closed", at: Date.now() });
+					first.off("response", onResponse);
+					first.off("error", onError);
+				}
+				expect(unexpectedError === undefined).toBe(true);
+				expect(responseReceived).toBe(false);
+				expect(first.destroyed).toBe(true);
 				await vi.waitFor(async () => {
 					const snapshot = await abortSnapshot();
 					expect(
 						snapshot.worker,
 						JSON.stringify({
-							phase: "before-disconnect",
+							phase: "await-worker-abort",
+							...snapshot,
+							client: {
+								destroyed: first.destroyed,
+								responseReceived,
+								unexpected_error: unexpectedError !== undefined,
+								events: clientEvents,
+							},
+						})
+					).toMatchObject({
+						aborted: true,
+						evaluated: false,
+						settled: "pending",
+						gate: { entered: true, released: false },
+					});
+				}, WAIT_FOR_OPTIONS);
+				await releaseAbortGate();
+				await vi.waitFor(async () => {
+					const snapshot = await abortSnapshot();
+					expect(
+						snapshot.worker,
+						JSON.stringify({
+							phase: "await-module-evaluation",
 							...snapshot,
 							clientEvents,
 						})
-					).toMatchObject({
-						started: true,
-						evaluated: false,
-					});
+					).toMatchObject({ evaluated: true });
 				}, WAIT_FOR_OPTIONS);
-			} finally {
-				disconnecting = true;
-				clientEvents.push({ phase: "disconnect-requested", at: Date.now() });
-				first.destroy();
-				await closed;
-				clientEvents.push({ phase: "request-closed", at: Date.now() });
-				first.off("response", onResponse);
-				first.off("error", onError);
-			}
-			expect(unexpectedError === undefined).toBe(true);
-			expect(responseReceived).toBe(false);
-			expect(first.destroyed).toBe(true);
-			await vi.waitFor(async () => {
-				const snapshot = await abortSnapshot();
+				const cached = await render("abort");
 				expect(
-					snapshot.worker,
-					JSON.stringify({
-						phase: "await-worker-abort",
-						...snapshot,
-						client: {
-							destroyed: first.destroyed,
-							responseReceived,
-							unexpected_error: unexpectedError !== undefined,
-							events: clientEvents,
-						},
-					})
-				).toMatchObject({
+					cached,
+					JSON.stringify({ phase: "cached-render", ...(await abortSnapshot()) })
+				).toEqual({ status: 200, body: "12" });
+				expect(await state("abort")).toMatchObject({
+					settled: "fulfilled",
 					aborted: true,
-					evaluated: false,
 				});
-			}, WAIT_FOR_OPTIONS);
-			await vi.waitFor(async () => {
 				const snapshot = await abortSnapshot();
-				expect(
-					snapshot.worker,
-					JSON.stringify({
-						phase: "await-module-evaluation",
-						...snapshot,
-						clientEvents,
-					})
-				).toMatchObject({ evaluated: true });
-			}, WAIT_FOR_OPTIONS);
-			const cached = await render("abort");
-			expect(
-				cached,
-				JSON.stringify({ phase: "cached-render", ...(await abortSnapshot()) })
-			).toEqual({ status: 200, body: "12" });
-			expect(await state("abort")).toMatchObject({
-				settled: "fulfilled",
-				aborted: true,
-			});
-			const snapshot = await abortSnapshot();
-			console.debug(
-				"IMPORT_LIFETIME_DIAGNOSTIC " +
-					JSON.stringify({ ...snapshot, clientEvents })
-			);
-			expect(snapshot.transport).toMatchObject({
-				events: expect.arrayContaining([
-					expect.objectContaining({ phase: "runtime-dispatch-create" }),
-				]),
-			});
+				console.debug(
+					"IMPORT_LIFETIME_DIAGNOSTIC " +
+						JSON.stringify({ ...snapshot, clientEvents })
+				);
+				expect(snapshot.transport).toMatchObject({
+					events: expect.arrayContaining([
+						expect.objectContaining({ phase: "runtime-dispatch-create" }),
+					]),
+				});
+			} finally {
+				await releaseAbortGate();
+			}
 		}
 	);
 

@@ -1,4 +1,4 @@
-import { phases, recordPhase } from "./state";
+import { abortGate, phases, recordPhase } from "./state";
 import type { Arm } from "./state";
 
 const promises = new Map<Arm, Promise<{ value: string }>>();
@@ -39,7 +39,20 @@ export default {
 			return new Response("ready");
 		}
 		if (url.pathname === "/state") {
-			return Response.json(phases[arm]);
+			return Response.json({
+				...phases[arm],
+				...(arm === "abort" ? { gate: abortGate } : {}),
+			});
+		}
+		if (url.pathname === "/release" && arm === "abort") {
+			if (request.method !== "POST") {
+				return new Response(null, { status: 405 });
+			}
+			if (!abortGate.released) {
+				abortGate.released = true;
+				recordPhase("abort", "module-gate-release-requested");
+			}
+			return new Response("released");
 		}
 		if (url.pathname !== "/kick" && url.pathname !== "/render") {
 			return new Response(null, { status: 404 });
