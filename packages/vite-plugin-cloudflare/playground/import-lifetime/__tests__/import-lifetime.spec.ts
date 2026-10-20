@@ -7,6 +7,16 @@ async function state(arm: Arm) {
 	return (await fetch(`${viteTestUrl}/state?arm=${arm}`)).json();
 }
 
+async function abortSnapshot() {
+	const [worker, transport] = await Promise.all([
+		state("abort"),
+		fetch(`${viteTestUrl}/__import-lifetime-transport`).then((response) =>
+			response.json()
+		),
+	]);
+	return { worker, transport, observed_at: Date.now() };
+}
+
 async function render(arm: Arm) {
 	try {
 		const response = await fetch(`${viteTestUrl}/render?arm=${arm}`, {
@@ -39,12 +49,17 @@ describe.runIf(!isBuild)("deferred import caller lifetime", () => {
 		{ retry: 0 },
 		async ({ expect }) => {
 			// Own a dedicated connection so disconnection does not depend on fetch pooling.
-			const first = get(`${viteTestUrl}/render?arm=abort`, { agent: false });
+			const clientEvents = [{ phase: "request-create", at: Date.now() }];
+			const first = get(`${viteTestUrl}/render?arm=abort`, {
+				agent: false,
+				headers: { "x-import-lifetime-call": "first" },
+			});
 			let responseReceived = false;
 			let disconnecting = false;
 			let unexpectedError: Error | undefined;
 			const onResponse = (response: IncomingMessage) => {
 				responseReceived = true;
+				clientEvents.push({ phase: "response-received", at: Date.now() });
 				response.resume();
 			};
 			const onError = (error: Error) => {
@@ -59,34 +74,79 @@ describe.runIf(!isBuild)("deferred import caller lifetime", () => {
 			);
 			try {
 				await vi.waitFor(async () => {
-					expect(await state("abort")).toMatchObject({
+					const snapshot = await abortSnapshot();
+					expect(
+						snapshot.worker,
+						JSON.stringify({
+							phase: "before-disconnect",
+							...snapshot,
+							clientEvents,
+						})
+					).toMatchObject({
 						started: true,
 						evaluated: false,
 					});
 				}, WAIT_FOR_OPTIONS);
 			} finally {
 				disconnecting = true;
+				clientEvents.push({ phase: "disconnect-requested", at: Date.now() });
 				first.destroy();
 				await closed;
+				clientEvents.push({ phase: "request-closed", at: Date.now() });
 				first.off("response", onResponse);
 				first.off("error", onError);
 			}
-			expect(unexpectedError).toBeUndefined();
+			expect(unexpectedError === undefined).toBe(true);
 			expect(responseReceived).toBe(false);
 			expect(first.destroyed).toBe(true);
 			await vi.waitFor(async () => {
-				expect(await state("abort")).toMatchObject({
+				const snapshot = await abortSnapshot();
+				expect(
+					snapshot.worker,
+					JSON.stringify({
+						phase: "await-worker-abort",
+						...snapshot,
+						client: {
+							destroyed: first.destroyed,
+							responseReceived,
+							unexpected_error: unexpectedError !== undefined,
+							events: clientEvents,
+						},
+					})
+				).toMatchObject({
 					aborted: true,
 					evaluated: false,
 				});
 			}, WAIT_FOR_OPTIONS);
 			await vi.waitFor(async () => {
-				expect(await state("abort")).toMatchObject({ evaluated: true });
+				const snapshot = await abortSnapshot();
+				expect(
+					snapshot.worker,
+					JSON.stringify({
+						phase: "await-module-evaluation",
+						...snapshot,
+						clientEvents,
+					})
+				).toMatchObject({ evaluated: true });
 			}, WAIT_FOR_OPTIONS);
-			expect(await render("abort")).toEqual({ status: 200, body: "12" });
+			const cached = await render("abort");
+			expect(
+				cached,
+				JSON.stringify({ phase: "cached-render", ...(await abortSnapshot()) })
+			).toEqual({ status: 200, body: "12" });
 			expect(await state("abort")).toMatchObject({
 				settled: "fulfilled",
 				aborted: true,
+			});
+			const snapshot = await abortSnapshot();
+			console.debug(
+				"IMPORT_LIFETIME_DIAGNOSTIC " +
+					JSON.stringify({ ...snapshot, clientEvents })
+			);
+			expect(snapshot.transport).toMatchObject({
+				events: expect.arrayContaining([
+					expect.objectContaining({ phase: "runtime-dispatch-create" }),
+				]),
 			});
 		}
 	);
