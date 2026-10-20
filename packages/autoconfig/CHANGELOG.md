@@ -1,5 +1,16 @@
 # @cloudflare/autoconfig
 
+## 0.7.12
+
+### Patch Changes
+
+- [#16285](https://github.com/cloudflare/workers-sdk/pull/16285) [`3b3e64f`](https://github.com/cloudflare/workers-sdk/commit/3b3e64f65b04b586696642311c235467d3b88699) Thanks [@edmundhung](https://github.com/edmundhung)! - Install `@cloudflare/vite-plugin@^2.0.0-beta.v.0` when autoconfiguring projects for cf
+
+- Updated dependencies [[`08f22d3`](https://github.com/cloudflare/workers-sdk/commit/08f22d36f42100af8b83ae9556643f63b536a4e9)]:
+  - @cloudflare/config@0.28.0
+  - @cloudflare/workers-utils@0.48.0
+  - @cloudflare/cli-shared-helpers@0.2.8
+
 ## 0.7.11
 
 ### Patch Changes
