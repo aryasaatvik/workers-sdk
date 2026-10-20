@@ -7,6 +7,12 @@ function initialState() {
 		evaluated: false,
 		settled: "pending",
 		aborted: false,
+		body_read: {
+			pending: false,
+			received_bytes: 0,
+			complete: false,
+			failed: false,
+		},
 		events,
 	};
 }

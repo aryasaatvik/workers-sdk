@@ -1,4 +1,4 @@
-import { get, type IncomingMessage } from "node:http";
+import { request, type IncomingMessage } from "node:http";
 import { describe, test, vi } from "vitest";
 import { isBuild, viteTestUrl, WAIT_FOR_OPTIONS } from "../../__test-utils__";
 import type { Arm } from "../src/state";
@@ -58,15 +58,16 @@ describe.runIf(!isBuild)("deferred import caller lifetime", () => {
 	);
 
 	test(
-		"settles a cached import after an abrupt runtime TCP reset aborts its first Worker request",
+		"settles a cached import when an abrupt runtime TCP reset aborts an incomplete upload",
 		{ retry: 0 },
 		async ({ expect }) => {
 			try {
 				// Own a dedicated connection so disconnection does not depend on fetch pooling.
 				const clientEvents = [{ phase: "request-create", at: Date.now() }];
-				const first = get(`${viteTestUrl}/render?arm=abort`, {
+				const first = request(`${viteTestUrl}/render?arm=abort`, {
 					agent: false,
-					headers: { "x-import-lifetime-call": "first" },
+					method: "POST",
+					headers: { "x-import-lifetime-call": "first", "content-length": "2" },
 				});
 				let responseReceived = false;
 				let disconnecting = false;
@@ -87,6 +88,8 @@ describe.runIf(!isBuild)("deferred import caller lifetime", () => {
 					first.once("close", resolve)
 				);
 				try {
+					// Send only one of two declared bytes; keep the native body read outstanding.
+					first.write("x");
 					await vi.waitFor(async () => {
 						const snapshot = await abortSnapshot();
 						expect(
@@ -101,6 +104,12 @@ describe.runIf(!isBuild)("deferred import caller lifetime", () => {
 							evaluated: false,
 							settled: "pending",
 							gate: { entered: true, released: false },
+							body_read: {
+								pending: true,
+								received_bytes: 1,
+								complete: false,
+								failed: false,
+							},
 						});
 					}, WAIT_FOR_OPTIONS);
 				} finally {

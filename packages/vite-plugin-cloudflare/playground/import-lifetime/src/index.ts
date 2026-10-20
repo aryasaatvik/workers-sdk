@@ -31,6 +31,31 @@ function load(arm: Arm): Promise<{ value: string }> {
 	return operation;
 }
 
+async function observeAbortBody(body: ReadableStream<Uint8Array>) {
+	const state = phases.abort.body_read;
+	try {
+		const reader = body.getReader();
+		try {
+			while (true) {
+				state.pending = true;
+				const { done, value } = await reader.read();
+				state.pending = false;
+				if (done) {
+					state.complete = true;
+					return;
+				}
+				state.received_bytes += value.byteLength;
+			}
+		} finally {
+			reader.releaseLock();
+		}
+	} catch {
+		state.failed = true;
+	} finally {
+		state.pending = false;
+	}
+}
+
 export default {
 	async fetch(request) {
 		const url = new URL(request.url);
@@ -69,6 +94,15 @@ export default {
 			},
 			{ once: true }
 		);
+		if (
+			arm === "abort" &&
+			request.headers.get("x-import-lifetime-call") === "first"
+		) {
+			if (request.method !== "POST" || request.body === null) {
+				return new Response("missing fixture body", { status: 400 });
+			}
+			void observeAbortBody(request.body);
+		}
 		const operation = load(arm);
 		if (url.pathname === "/kick") {
 			return new Response("kicked");
