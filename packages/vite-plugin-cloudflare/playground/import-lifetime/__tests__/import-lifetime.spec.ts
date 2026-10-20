@@ -1,3 +1,4 @@
+import { get, type IncomingMessage } from "node:http";
 import { describe, test, vi } from "vitest";
 import { isBuild, viteTestUrl, WAIT_FOR_OPTIONS } from "../../__test-utils__";
 import type { Arm } from "../src/state";
@@ -37,12 +38,24 @@ describe.runIf(!isBuild)("deferred import caller lifetime", () => {
 		"settles a cached import after the first Worker request actually aborts",
 		{ retry: 0 },
 		async ({ expect }) => {
-			const controller = new AbortController();
-			const first = fetch(`${viteTestUrl}/render?arm=abort`, {
-				signal: controller.signal,
-			}).then(
-				() => "responded",
-				() => "client-aborted"
+			// Own a dedicated connection so disconnection does not depend on fetch pooling.
+			const first = get(`${viteTestUrl}/render?arm=abort`, { agent: false });
+			let responseReceived = false;
+			let disconnecting = false;
+			let unexpectedError: Error | undefined;
+			const onResponse = (response: IncomingMessage) => {
+				responseReceived = true;
+				response.resume();
+			};
+			const onError = (error: Error) => {
+				if (!disconnecting) {
+					unexpectedError = error;
+				}
+			};
+			first.once("response", onResponse);
+			first.on("error", onError);
+			const closed = new Promise<void>((resolve) =>
+				first.once("close", resolve)
 			);
 			try {
 				await vi.waitFor(async () => {
@@ -52,11 +65,20 @@ describe.runIf(!isBuild)("deferred import caller lifetime", () => {
 					});
 				}, WAIT_FOR_OPTIONS);
 			} finally {
-				controller.abort();
+				disconnecting = true;
+				first.destroy();
+				await closed;
+				first.off("response", onResponse);
+				first.off("error", onError);
 			}
-			expect(await first).toBe("client-aborted");
+			expect(unexpectedError).toBeUndefined();
+			expect(responseReceived).toBe(false);
+			expect(first.destroyed).toBe(true);
 			await vi.waitFor(async () => {
-				expect(await state("abort")).toMatchObject({ aborted: true });
+				expect(await state("abort")).toMatchObject({
+					aborted: true,
+					evaluated: false,
+				});
 			}, WAIT_FOR_OPTIONS);
 			await vi.waitFor(async () => {
 				expect(await state("abort")).toMatchObject({ evaluated: true });
