@@ -28,7 +28,13 @@ function firstAbortRequest(request: object) {
 	return false;
 }
 
-// Fixture control: abruptly reset the one runtime-bound TCP request already aborted by Vite.
+/**
+ * Abruptly resets the marked runtime connection after Vite aborts its request,
+ * provided the fixture can prove exclusive ownership of the socket.
+ *
+ * @returns Reset state for assertions and a `dispose()` function that removes
+ * the shared diagnostics-channel listeners.
+ */
 export function installRuntimeReset() {
 	const bornHere = new WeakSet<Socket>();
 	const active = new WeakMap<Socket, Set<object>>();
