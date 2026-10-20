@@ -47,6 +47,13 @@ export type DurableObjectClassNames = Map<
 	>
 >;
 
+// Maps the names of Workflows declared in a Worker's `exports` to the Worker
+// and class that define them
+export type WorkflowExporters = Map<
+	/* workflowName */ string,
+	{ workerName: string; className: string; stepLimit?: number }
+>;
+
 // Maps queue names to producer worker options.
 export type QueueProducers = Map<string, z.infer<typeof QueueProducerSchema>>;
 
@@ -71,6 +78,7 @@ export interface PluginServicesOptions {
 	// ~~Leaky abstractions~~ "Plugin specific options" :)
 	durableObjectClassNames: DurableObjectClassNames;
 	unsafeEphemeralDurableObjects: boolean;
+	workflowExporters: WorkflowExporters;
 	queueProducers: QueueProducers;
 	queueConsumers: QueueConsumers;
 	// True when the dev registry is enabled, i.e. workers in other dev
@@ -88,6 +96,16 @@ export interface ServicesExtensions {
 }
 
 /**
+ * Extra state a plugin may need when building its Node-side bindings. Kept
+ * separate from `ParsedWorkerOptions` because it is runtime state owned by the
+ * Miniflare instance rather than configuration.
+ */
+export interface PluginNodeBindingsContext {
+	hyperdriveProxyController: HyperdriveProxyController;
+	workerIndex: number;
+}
+
+/**
  * Every plugin receives the full parsed per-worker `WorkerOptions` and filters
  * its own bindings out of `options.config.env` / `options.config.exports` /
  * `options.config.triggers` (plus `options.legacy` / `options.dev`).
@@ -100,7 +118,8 @@ export interface Plugin {
 		workerIndex: number
 	): Awaitable<Worker_Binding[] | void>;
 	getNodeBindings(
-		options: ParsedWorkerOptions
+		options: ParsedWorkerOptions,
+		context: PluginNodeBindingsContext
 	): Awaitable<Record<string, unknown>>;
 	getServices(
 		options: PluginServicesOptions

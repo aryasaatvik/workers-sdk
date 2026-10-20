@@ -38,7 +38,6 @@ const BINDING_LOCAL_SUPPORT: Record<
 	assets: "local-only",
 	unsafe_hello_world: "local-only",
 	durable_object_namespace: "local-only",
-	hyperdrive: "local-only",
 	fetcher: "local-only",
 	analytics_engine: "local-only",
 	secrets_store_secret: "local-only",
@@ -48,6 +47,7 @@ const BINDING_LOCAL_SUPPORT: Record<
 	kv_namespace: "local-and-remote",
 	r2_bucket: "local-and-remote",
 	d1: "local-and-remote",
+	hyperdrive: "local-and-remote",
 	workflow: "local-only",
 	browser: "local-and-remote",
 	images: "local-and-remote",
@@ -64,6 +64,7 @@ const BINDING_LOCAL_SUPPORT: Record<
 	dispatch_namespace: "remote",
 
 	// Reach out to the @cloudflare/wrangler team before adding anything here
+	k2: "DO-NOT-USE-this-resource-will-never-have-a-local-simulator",
 	ai: "DO-NOT-USE-this-resource-will-never-have-a-local-simulator",
 	ai_search: "DO-NOT-USE-this-resource-will-never-have-a-local-simulator",
 	ai_search_namespace:
@@ -73,6 +74,7 @@ const BINDING_LOCAL_SUPPORT: Record<
 	vpc_service: "DO-NOT-USE-this-resource-will-never-have-a-local-simulator",
 	vpc_network: "DO-NOT-USE-this-resource-will-never-have-a-local-simulator",
 	agent_memory: "DO-NOT-USE-this-resource-will-never-have-a-local-simulator",
+	analytics: "DO-NOT-USE-this-resource-will-never-have-a-local-simulator",
 };
 
 export function getBindingLocalSupport(

@@ -1,5 +1,6 @@
 import type {
 	CacheOptions,
+	DurableObjectCodeUpdateStrategy,
 	Exports,
 	LocalS3Credentials,
 	Observability,
@@ -133,6 +134,12 @@ export interface CfTextBlobBindings {
 export interface CfBrowserBinding {
 	binding: string;
 	raw?: boolean;
+	remote?: boolean;
+}
+
+/** A binding to Analytics SQL. */
+export interface CfAnalyticsSQLBinding {
+	binding: string;
 	remote?: boolean;
 }
 
@@ -313,6 +320,11 @@ export interface CfHyperdrive {
 	binding: string;
 	id: string;
 	localConnectionString?: string;
+	/**
+	 * Connect to the deployed Hyperdrive configuration during local development
+	 * instead of a local database.
+	 */
+	remote?: boolean;
 }
 
 export interface CfDevPluginCfg {
@@ -398,6 +410,12 @@ export interface CfPipeline {
 	binding: string;
 	stream?: string;
 	pipeline?: string;
+	remote?: boolean;
+}
+
+export interface CfK2Binding {
+	binding: string;
+	stream: string;
 	remote?: boolean;
 }
 
@@ -504,6 +522,7 @@ export interface CfWorkerInit {
 		| undefined;
 
 	migrations: CfDurableObjectMigrations | undefined;
+	code_update_strategy?: DurableObjectCodeUpdateStrategy;
 	/**
 	 * Declarative exports configuration. Durable Object entries are sent instead
 	 * of `migrations`.
